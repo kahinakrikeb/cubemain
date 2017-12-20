@@ -12,7 +12,8 @@ public class Cubedessin {
     private FloatBuffer mColorBuffer;
     private ByteBuffer mIndexBuffer;
 
-    private float matrice[] = {
+    private float vertices[] = {
+            // FRONT
             -1.0f, -1.0f, -1.0f,
             1.0f, -1.0f, -1.0f,
             1.0f,  1.0f, -1.0f,
@@ -23,14 +24,15 @@ public class Cubedessin {
             -1.0f,  1.0f,  1.0f
     };
     private float couleur[] = {
-            0.0f,  1.0f,  0.0f,  1.0f,
-            0.0f,  1.0f,  0.0f,  1.0f,
-            1.0f,  0.5f,  0.0f,  1.0f,
-            1.0f,  0.5f,  0.0f,  1.0f,
-            1.0f,  0.0f,  0.0f,  1.0f,
-            1.0f,  0.0f,  0.0f,  1.0f,
-            0.0f,  0.0f,  1.0f,  1.0f,
-            1.0f,  0.0f,  1.0f,  1.0f
+            0.583f,  0.771f,  0.014f,
+            0.609f,  0.115f,  0.436f,
+            0.327f,  0.483f,  0.844f,
+            0.822f,  0.569f,  0.201f,
+            0.435f,  0.602f,  0.223f,
+            0.310f,  0.747f,  0.185f,
+            0.597f,  0.770f,  0.761f,
+            0.559f,  0.436f,  0.730f,
+
     };
 
     private byte indices[] = {
@@ -43,10 +45,10 @@ public class Cubedessin {
     };
 
     public Cubedessin() {
-        ByteBuffer byteBuf = ByteBuffer.allocateDirect(matrice.length * 4);
+        ByteBuffer byteBuf = ByteBuffer.allocateDirect(vertices.length * 4);
         byteBuf.order(ByteOrder.nativeOrder());
         mVertexBuffer = byteBuf.asFloatBuffer();
-        mVertexBuffer.put(matrice);
+        mVertexBuffer.put(vertices);
         mVertexBuffer.position(0);
 
         byteBuf = ByteBuffer.allocateDirect(couleur.length * 4);

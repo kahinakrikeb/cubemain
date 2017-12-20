@@ -38,39 +38,23 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements CvCameraViewListener2 {
 
-	// declare global variables.
-	// Reuse OpenCV instances like Mat because creating new objects is expensive
-    private JavaCameraView affichcam;
-    private Mat ycc;
-    private int camDim[] = {320, 240};          // TODO: higher resolution
-    private float offsetFactX, offsetFactY;
-    private float scaleFactX, scaleFactY;
-    private boolean handDetected = false;
-    private Scalar minHSV;
-    private Scalar maxHSV;
+    // declaration des variables globales.
+    // Réutilisez des instances OpenCV comme Mat
+    private JavaCameraView affichcam; // implémentation de Bridge View entre OpenCV et Java Camera
+    private Mat matri1; // la matrice
+    private int camDim[] = {320, 240};          // Dimension de la caméra
+    private Scalar minCouleurHSV;
+    private Scalar maxCouleurHSV;
     private Mat frame, frame2;
     private Point palmCenter;
-    private List<Point> doits;
-    private TermCriteria termCriteria;
-    private List<Mat> allRoiHist;
-    private MatOfFloat interval;
-    private MatOfInt channels;
-    private Mat dstBackProject;
-    private MatOfPoint palmContour;
-    private MatOfPoint hullPoints;
     private MatOfInt hull;
     private Mat hierarchy;
-    private Mat touchedMat;
-    private MatOfInt4 convexityDefects;
     private Mat nonZero;
-    private Mat nonZeroRow;
     private List<MatOfPoint> contours;
     private GLRenderer myGLRenderer;  // Objet OpenGL GLRenderer
-    private int speedTime = 0;        // Temp de rapidité
-    private int speedFingers = 0;     // Temp de rapidité des doights
 
 
-    // Vérifier que OpenCV charge les fonctions/méthodes natives
+    // Vérifier et  charge les fonctions/méthodes d'OpenCV
     static {
         if (!OpenCVLoader.initDebug())
             Log.e("init", "OpenCV NOT loaded");
@@ -96,22 +80,19 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
         }
     };
 
-	
-	/**
-	 * Called only once on app start up
-	 */
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);// On garde la fenetre éveillé
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);// On garde la fenetre on mode on eveiller
         View decorView = getWindow().getDecorView();// Le DecorView est la vue qui tient le fond de la fenetre
-        int uiOptions = View.SYSTEM_UI_FLAG_FULLSCREEN;// On met l'app en pleine écran
+        int uiOptions = View.SYSTEM_UI_FLAG_FULLSCREEN;// On affiche l'application en pleine écran
         decorView.setSystemUiVisibility(uiOptions); // Fonction requise pour le pleine écran (personnalisation de la vue)
         setContentView(R.layout.activity_main);
 
         //affichage de la camera
-        affichcam = (JavaCameraView) findViewById(R.id.surface_affichage);// On récupère une référence vers la caméra
+        affichcam = (JavaCameraView) findViewById(R.id.surface_affichage);// On récupère une référence dans le fichier xml pour pouvoir l'utiliser dans java
         affichcam.setVisibility(SurfaceView.VISIBLE);// On affiche ce que la caméra filme
         affichcam.setCvCameraViewListener(this);// On implémente un listenner sur la caméra
 
@@ -119,14 +100,14 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
 
 
 		// initialise OpenGL view
-      GLSurfaceView myGLView = new GLSurfaceView(this);// Une SurfaceView est utilisé& pour une surface dédié à l'affichage d'un rendu OpenGL
-        myGLView.setEGLConfigChooser(8, 8, 8, 8, 16, 0);// Configure les couleurs RGB de la surfaceView
-        myGLView.getHolder().setFormat(PixelFormat.TRANSLUCENT); // Permet de rendre les pixels translucides (invisbles)
-        myGLRenderer = new GLRenderer();// Nouvel objet GLRenderer
-        myGLView.setRenderer(myGLRenderer); // On applique cet objet à la surfaceView
-        addContentView(myGLView, new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,
+        GLSurfaceView maGLView = new GLSurfaceView(this);// instantialtion d'une GLsurfaceView pour le rondu du cube
+        maGLView.setEGLConfigChooser(8, 8, 8, 8, 16, 0);// Configure les couleurs RGB de la surfaceView
+        maGLView.getHolder().setFormat(PixelFormat.TRANSLUCENT); // Permet de rendre les pixels translucides (invisbles)
+        myGLRenderer = new GLRenderer();// Nouvel objet GLRenderer qui genere le cube
+        maGLView.setRenderer(myGLRenderer); // On applique cet objet à la surfaceView
+        addContentView(maGLView, new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT));// on applique le paramètre wrapContent au layout de cette surfaceview
-        myGLView.setZOrderMediaOverlay(true); // Contrôler si la surface de la vue de surface est placé sur le dessus de sa fenêtre.
+        maGLView.setZOrderMediaOverlay(true); // Contrôler si la surface de la vue de surface est placé sur le dessus de sa fenêtre.
     }
 
 
@@ -145,35 +126,31 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
     @Override
     public void onCameraViewStarted(int width, int height) {
 		
-        setScaleFactors(width, height);// On appliquer les valeurs de largeur et hauteur de l'échelle de la fenêtre
+       // setScaleFactors(width, height);// On appliquer les valeurs de largeur et hauteur de l'échelle de la fenêtre
         myGLRenderer.setVidDim(camDim[0], camDim[1]);// On applique les dimensions à la caméra
-        ycc = new Mat(height, width, CvType.CV_8UC3); // On affecte les dimensions des channels d'une image
-        //handColor = new Scalar(255);// Représent la couleur de la main
-        minHSV = new Scalar(3);// On affecte la valeur minimum d'un pixel
-        maxHSV = new Scalar(3);// On affecte la valeur maximum d'un pixel
-        frame = new Mat();
-        termCriteria = new TermCriteria(TermCriteria.COUNT | TermCriteria.EPS, 10, 1);// utilisé pour les algorythme itératif
-        //allRoi = new ArrayList<>();
-        allRoiHist = new ArrayList<>();// Tableau de List
-        interval = new MatOfFloat(0, 180); //MatOfInt, MatOfFloat est des classes qui sont héritées de Mat et a 1 canal de type et de taille définie 1xN. Il est analogue de std :: vector <int>, std :: vector <deux>, etc dans le code C ++.
-        channels = new MatOfInt(0);// MatOfInt, MatOfFloat est des classes qui sont héritées de Mat et a 1 canal de type et de taille définie 1xN. Il est analogue de std :: vector <int>, std :: vector <deux>, etc dans le code C ++.
-        dstBackProject = new Mat();
-        palmContour = new MatOfPoint();// Tableau Vector de point correspondant au contour de la main
-        hullPoints = new MatOfPoint();// Tableau Vector de point correspondant au point de chaque doight
+        matri1 = new Mat(height, width, CvType.CV_8UC3); // On affecte les dimensions de la matrice d'une image
+        minCouleurHSV = new Scalar(3);// On affecte la valeur minimum d'un pixel
+        maxCouleurHSV = new Scalar(3);// On affecte la valeur maximum d'un pixel
+
+    // interval min max en HSV pour detecter la main
+        minCouleurHSV.val[0] = 0;
+        minCouleurHSV.val[1] = 30;
+        minCouleurHSV.val[2] = 52.75749999999999;
+        maxCouleurHSV.val[0] = 18.406875;
+        maxCouleurHSV.val[1] =207.890625;
+        maxCouleurHSV.val[2] = 252.7575;
+
+
+        frame = new Mat();//matice pour recuper les images de la video en lisant images pas images
         hull = new MatOfInt();// MatOfInt, MatOfFloat est des classes qui sont héritées de Mat et a 1 canal de type et de taille définie 1xN. Il est analogue de std :: vector <int>, std :: vector <deux>, etc dans le code C ++.
         hierarchy  = new Mat();
-        touchedMat = new Mat();
-        convexityDefects = new MatOfInt4();
         nonZero = new Mat();
         frame2 = new Mat();
-        nonZeroRow = new Mat();
         contours = new ArrayList<>();
-        palmCenter = new Point(-1, -1); // Point de coordonnées x et y correspondant au centre de la main
+        palmCenter = new Point(10, 10); // Point de coordonnées x et y correspondant au centre de la main
 
         myGLRenderer.setRenderCube(true);
         myGLRenderer.setCubeRotation(0);
-
-
     }
 
     // Méthode permettant d'appliquer des fonctions à l'image de la caméra et de renvoyer l'image modifié à la caméra
@@ -181,112 +158,62 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
 
         // On remplie la matrice des channels de l'image avec les couleurs RGBA
-        ycc = inputFrame.rgba();
+        matri1 = inputFrame.rgba();
 
         // Si la main est détectée
-        if (handDetected) {
+
 			// clone frame beacuse original frame needed for display
-            frame = ycc.clone();
+            frame = matri1.clone();
 
 			// remove noise and convert to binary in HSV range determined by user input
             Imgproc.GaussianBlur(frame, frame, new Size(9, 9), 5); // Applique un effet de flau gaussian à l'image
             Imgproc.cvtColor(frame, frame, Imgproc.COLOR_RGB2HSV_FULL); // Convertit une image d'un espace colorimétrique à un autre.
-            Core.inRange(frame, minHSV, maxHSV, frame);// Vérifie si les éléments d'un tableau sont liés avec les éléments d'un autre tableau
+            Core.inRange(frame, minCouleurHSV, maxCouleurHSV, frame);//applique le filtre interval sur la frame(image)
 
-//            Point palm = getDistanceTransformCenter(frame);
 
-			// get all possible contours and then determine palm contour
+			// renvoie les zones blanches de l image
             contours =  getAllContours(frame);
             int indexOfPalmContour = getPalmContour(contours);
-
+           // Log.i("SHVss", "onCameraFrame: "+indexOfPalmContour);
             // Conditionnnel permettant de savoir si on affiche le cube ou pas en fonction de la détection du contour de la main ou pas
-            if(indexOfPalmContour < 0)
-                myGLRenderer.setRenderCube(false);		// no palm in frame
-            else{
-				// get anchor point for cube rendering
-                 Point palm = getDistanceTransformCenter(frame);
-                //Point palm = new Point((double) 50,(double)50);
-                myGLRenderer.setPos(palm.x, palm.y);
-                //myGLRenderer.setPos(50, 50);
-                Rect roi = Imgproc.boundingRect(contours.get(indexOfPalmContour));
-				
-				// set cube scale
-                myGLRenderer.setCubeSize(getEuclDistance(palm, roi.tl()));
-
-				// get finger tips for gesture recognition
-                List<Point> hullPoints = getConvexHullPoints(contours.get(indexOfPalmContour));
-                doits = getFingersTips(hullPoints, frame.rows());
-                Collections.reverse(doits);
-
-				// set cube rotation speed
-                int fSize = doits.size();
-                if(fSize != speedFingers){
-                    speedFingers = fSize;
-                    speedTime = 0;
-                }
-                else if(fSize != 5)
-                    speedTime++;
-                if(speedTime > 8)
-                    myGLRenderer.setCubeRotation(fSize);
+            if(indexOfPalmContour < 0){
+            		// afficher le cube avec une face initial
+                myGLRenderer.setRenderCube(true);
+                myGLRenderer.monCubeRotation=0;
+                myGLRenderer.setCubeRotation(0);
             }
-            return ycc;
-        }
-        return ycc;
+            else{
+                //afficher le cube en 3D avec rotation
+				// trouver les points ou afficher le cube
+                 Point palm = getDistanceTransformCenter(frame);
+                // setter la position pour le render du cube sur li'image qui correspondes au point trouvé dans la ligne precedente
+                myGLRenderer.setPos(palm.x, palm.y);
+
+                myGLRenderer.setCubeRotation(5);
+
+            }
+            return matri1;
+
     }
 
     @Override
     public void onCameraViewStopped() {
-		// release all resources on camera close
+		// libérer toutes les ressources  on camera close
         frame.release();
-        ycc.release();
-        interval.release();
-        channels.release();
-        dstBackProject.release();
-        palmContour.release();
-        hullPoints.release();
+        matri1.release();
         hull.release();
         hierarchy.release();
-        touchedMat.release();
-        convexityDefects.release();
         nonZero.release();
         frame2.release();
-        nonZeroRow.release();
-        while (allRoiHist.size() > 0)
-            allRoiHist.get(0).release();
+
         while (contours.size() > 0)
             contours.get(0).release();
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        if(! handDetected){
-            // clone and blur touched frame
-            frame = ycc.clone();
-            Imgproc.GaussianBlur(frame, frame, new Size(9, 9), 5);
-            // calculate x, y coords because resolution is scaled on device display
-            int x = Math.round((event.getX() - offsetFactX) * scaleFactX) ;
-            int y = Math.round((event.getY() - offsetFactY) * scaleFactY);
-            int rows = frame.rows();
-            int cols = frame.cols();
-			// reurn if touched point is outside camera resolution
-            if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
-			// set palm center point and average HSV value
-            palmCenter.x = x;
-            palmCenter.y = y;
-            minHSV.val[0] = 0;
-            maxHSV.val[0] = 18.406875;
-            minHSV.val[1] = 30.0;
-            maxHSV.val[1] = 207.890625;
-            minHSV.val[2] = 52.75749999999999;
-            maxHSV.val[2] = 252.7575;
-            handDetected = true;
-        }
-        return false;
-    }
-	
-	/**
-	 * Method to compute and return strongest point of distance transform.
-	 * For a binary image with palm in white, strongest point will be the palm center.
+    /**
+     * Méthode pour calculer et retourner le plus fort point de transformation de distance.
+     * Pour une image binaire avec une paume en blanc.
+
 	 */
     protected Point getDistanceTransformCenter(Mat frame){
 
@@ -296,7 +223,7 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
         Imgproc.threshold(frame, frame, 254, 255, Imgproc.THRESH_TOZERO);
         Core.findNonZero(frame, nonZero);
 
-        // have to manually loop through matrix to calculate sums
+        // calculer les sommes
         int sumx = 0, sumy = 0;
         for(int i=0; i<nonZero.rows(); i++) {
             sumx += nonZero.get(i, 0)[0];
@@ -308,62 +235,9 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
         return new Point(sumx, sumy);
     }
 
-	
-	/**
-	 * Method to get number of fingers being help up in palm image
-	 */
-    protected List<Point> getFingersTips(List<Point> hullPoints, int rows){
-        // group into clusters and find distance between each cluster. distance should approx be same
 
-        double thresh = 80;
-        List<Point> fingerTips  = new ArrayList<>();
-        for(int i=0; i<hullPoints.size(); i++){
-            Point point = hullPoints.get(i);
-            if(rows - point.y < thresh)
-                continue;
-            if(fingerTips.size() == 0){
-                fingerTips.add(point);
-                continue;
-            }
-            Point prev = fingerTips.get(fingerTips.size() - 1);
-            double euclDist = getEuclDistance(prev, point);
-			
-            if(getEuclDistance(prev, point) > thresh/2 &&
-                    getEuclDistance(palmCenter, point) > thresh)
-                fingerTips.add(point);
-				
-            if(fingerTips.size() == 5)  // prevent detection of point after thumb
-                break;
-        }
-        return fingerTips;
-    }
-
-	
 	/**
-	 * Method to get eucledean distance between two points.
-	 */
-    protected double getEuclDistance(Point one, Point two){
-        return Math.sqrt(Math.pow((two.x - one.x), 2)
-                + Math.pow((two.y - one.y), 2));
-    }
-
-	
-	/**
-	 * Method to get convex hull points.
-	 */
-    protected List<Point> getConvexHullPoints(MatOfPoint contour){
-        Imgproc.convexHull(contour, hull);
-        List<Point> hullPoints = new ArrayList<>();
-        for(int j=0; j < hull.toList().size(); j++){
-            hullPoints.add(contour.toList().get(hull.toList().get(j)));
-        }
-        return hullPoints;
-    }
-
-	
-	/**
-	 * Method to get contour of palm. Computed by the 
-	 * knowledge that palm center has to lie inside it.
+	 * revoinvoie le centre du countour ou il faut afficher le dessin
 	 */
     protected int getPalmContour(List<MatOfPoint> contours){
 
@@ -388,26 +262,6 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
         return contours;
     }
 
-	/**
-	 * Method to set scale factors for coordinate translation
-	 */
-    protected void setScaleFactors(int vidWidth, int vidHeight){
-        float deviceWidth = affichcam.getWidth();
-        float deviceHeight = affichcam.getHeight();
-        if(deviceHeight - vidHeight < deviceWidth - vidWidth){
-            float temp = vidWidth * deviceHeight / vidHeight;
-            offsetFactY = 0;
-            offsetFactX = (deviceWidth - temp) / 2;
-            scaleFactY = vidHeight / deviceHeight;
-            scaleFactX = vidWidth / temp;
-        }
-        else{
-            float temp = vidHeight * deviceWidth / vidWidth;
-            offsetFactX= 0;
-            offsetFactY = (deviceHeight - temp) / 2;
-            scaleFactX = vidWidth / deviceWidth;
-            scaleFactY = vidHeight / temp;
-        }
-    }
+
 }
 
